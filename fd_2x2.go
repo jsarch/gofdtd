@@ -5,21 +5,6 @@ import (
 	// "runtime"
 )
 
-type Section struct {
-	in, out      [][]float64
-	i_dx2, i_dy2 float64
-	row_0, row_n chan float64
-	col_0, col_m chan float64
-}
-
-func (s *Section) swapInOut() {
-	s.in, s.out = s.out, s.in
-}
-
-func (s *Section) Print() {
-	print(s.in)
-	print(s.out)
-}
 
 func print(in [][]float64) {
 	for x := range in {
@@ -31,64 +16,6 @@ func print(in [][]float64) {
 	fmt.Println()
 }
 
-func convolve(section Section) {
-
-	in := section.in
-	out := section.out
-
-	i_dx2, i_dy2 := section.i_dx2, section.i_dy2
-
-	row := 0
-	for col := 1; col < len(in[row])-1; col++ {
-		in[row][col] = <-section.row_0
-	}
-	row = len(in) - 1
-	for col := 1; col < len(in[row])-1; col++ {
-		in[row][col] = <-section.row_n
-	}
-
-	for row := 1; row < len(in)-1; row++ {
-
-		for col := 1; col < len(in[row])-1; col++ {
-
-			out[row][col] = (in[row][col-1]+in[row][col+1]-2*in[row][col])*i_dx2 + (in[row-1][col]+in[row+1][col]-2*in[row][col])*i_dy2 + in[row][col]
-
-		}
-
-	}
-}
-
-func boundary_top(ch chan float64, dx int) {
-	for {
-		for col := 1; col < dx-1; col++ {
-			ch <- 0.0
-		}
-	}
-}
-
-func boundary_bottom(ch chan float64, dx int) {
-	for {
-		for col := 1; col < dx-1; col++ {
-			ch <- 0.0
-		}
-	}
-}
-
-func boundary_left(ch chan float64, dy int) {
-	for {
-		for row := 1; row < dy-1; row++ {
-			ch <- 0.0
-		}
-	}
-}
-
-func boundary_right(ch chan float64, dy int) {
-	for {
-		for row := 1; row < dy-1; row++ {
-			ch <- 0.0
-		}
-	}
-}
 
 func create(dx, dy int) [][]float64 {
 	out := make([][]float64, dy)
@@ -102,41 +29,6 @@ func create(dx, dy int) [][]float64 {
 	return out
 }
 
-func run() {
-	const (
-		dx    = 4
-		dy    = 5
-		i_dx2 = 1.0 / float64(dx*dx)
-		i_dy2 = 1.0 / float64(dy*dy)
-	)
-
-	section := Section{
-		create(dx, dy),
-		create(dx, dy),
-		i_dx2, i_dy2,
-		make(chan float64, dx), make(chan float64, dx),
-		make(chan float64, dy), make(chan float64, dy)}
-
-	section.in[1][2] = 3
-
-	section.Print()
-
-	go boundary_top(section.row_0, dx)
-	go boundary_bottom(section.row_n, dx)
-	go boundary_left(section.col_0, dy)
-	go boundary_right(section.col_m, dy)
-
-	convolve(section)
-
-	section.Print()
-
-	section.swapInOut()
-
-	convolve(section)
-
-	section.Print()
-
-}
 
 type Domain struct {
 	in, out                                    [][]float64
@@ -231,19 +123,15 @@ func (d *Domain) split2x2() {
 
 	d.topLeft = &Domain{numRows: halfRows, numCols: halfCols, startRow: d.startRow, startCol: d.startCol, totalRows: d.totalRows, totalCols: d.totalCols,
 		toRight: sendTLtoTR, fromRight: sendTRtoTL, toBottom: sendTLtoBL, fromBottom: sendBLtoTL, toLeft: nil, fromLeft: d.fromLeft[:halfRows], toTop: nil, fromTop: d.fromTop[:halfCols]}
-	// d.topLeft.aliasDataRowsCols(d
 
 	d.topRight = &Domain{numRows: halfRows, numCols: halfCols, startRow: d.startRow, startCol: d.startCol + halfCols, totalRows: d.totalRows, totalCols: d.totalCols,
 		fromLeft: sendTLtoTR, toLeft: sendTRtoTL, toBottom: sendTRtoBR, fromBottom: sendBRtoTR, toRight: nil, fromRight: d.fromRight[:halfRows], toTop: nil, fromTop: d.fromTop[halfCols:]}
-	// d.topRight.aliasDataRowsCols(d)
 
 	d.bottomLeft = &Domain{numRows: halfRows, numCols: halfCols, startRow: d.startRow + halfRows, startCol: d.startCol, totalRows: d.totalRows, totalCols: d.totalCols,
 		toRight: sendBLtoBR, fromRight: sendBRtoBL, fromTop: sendTLtoBL, toTop: sendBLtoTL, toLeft: nil, fromLeft: d.fromLeft[halfRows:], toBottom: nil, fromBottom: d.fromBottom[:halfCols]}
-	// d.bottomLeft.aliasDataRowsCols(d)
 
 	d.bottomRight = &Domain{numRows: halfRows, numCols: halfCols, startRow: d.startRow + halfRows, startCol: d.startCol + halfCols, totalRows: d.totalRows, totalCols: d.totalCols,
 		fromLeft: sendBLtoBR, toLeft: sendBRtoBL, fromTop: sendTRtoBR, toTop: sendBRtoTR, toRight: nil, fromRight: d.fromRight[halfRows:], toBottom: nil, fromBottom: d.fromBottom[halfCols:]}
-	// d.bottomRight.aliasDataRowsCols(d)
 
 	if d.toLeft != nil {
 		d.topLeft.toLeft = d.toLeft[:halfRows]
@@ -413,13 +301,6 @@ func main() {
 		totalRows = 16
 		totalCols = 8
 	)
-
-	// data := create(totalCols, totalRows)
-	// for i := range data {
-	// 	for j := range data[i] {
-	// 		data[i][j] = float64(i*len(data[i]) + j)
-	// 	}
-	// }
 
 	leftBoundary := make([]chan float64, totalRows)
 	rightBoundary := make([]chan float64, totalRows)
